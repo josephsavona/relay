@@ -152,8 +152,8 @@ describe('printRelayQuery', () => {
         env: value
       });
       expect(printRelayQuery(query)).toEqual(trimQuery(`
-        query FooQuery {
-          settings(environment:WEB) {
+        query FooQuery($0:Environment) {
+          settings(environment:$0) {
             notificationSounds
           }
         }
@@ -173,8 +173,8 @@ describe('printRelayQuery', () => {
       });
 
       expect(printRelayQuery(query)).toEqual(trimQuery(`
-        query UnknownFile {
-          checkinSearchQuery(query: {query:"Menlo Park"}) {
+        query UnknownFile($0:CheckinSearchInput) {
+          checkinSearchQuery(query:$0) {
             query
           }
         }
