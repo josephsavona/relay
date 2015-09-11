@@ -368,6 +368,13 @@ class RelayQueryNode {
     return children;
   }
 
+  getDirectives(): Array<Directive> {
+    return this.__concreteNode__.directives.map(directive => ({
+      name: directive.name,
+      arguments: callsFromGraphQL(directive.arguments, this.__variables__),
+    }));
+  }
+
   getField(field: RelayQueryField): ?RelayQueryField {
     return this.getFieldByStorageKey(field.getStorageKey());
   }
