@@ -83,6 +83,7 @@ function getFragmentCode(fragment, options) {
   var fragments = fieldsAndFragments.fragments;
   var metadata = getRelayDirectiveMetadata(fragment);
 
+  var directiveCode = printDirectives(fragment.directives);
   var metadataCode = stringifyObject(metadata);
 
   return getFunctionArgCode([
@@ -90,7 +91,8 @@ function getFragmentCode(fragment, options) {
     JSON.stringify(getTypeName(fragment)),
     fields,
     fragments,
-    metadataCode
+    metadataCode,
+    directiveCode
   ]);
 }
 
@@ -121,7 +123,7 @@ function printQuery(query, options) {
     requisiteFields[rootCall.arg] = true;
   }
 
-  var callArgsCode = printArguments(rootField.arguments[0], options);
+  var callArgsCode = printArguments(rootField.arguments[0]);
 
   var fieldsAndFragments = printFieldsAndFragments(
     rootField.selectionSet,
@@ -150,6 +152,7 @@ function printQuery(query, options) {
     }
   }
 
+  var directiveCode = printDirectives(rootField.directives);
   var metadataCode = stringifyObject(metadata);
 
   var argsCode = getFunctionArgCode([
@@ -158,7 +161,8 @@ function printQuery(query, options) {
     fields,
     fragments,
     metadataCode,
-    JSON.stringify(getName(query))
+    JSON.stringify(getName(query)),
+    directiveCode
   ]);
 
   var substitutionNames = options.substitutions.join(', ');
@@ -255,6 +259,12 @@ function printFieldsAndFragments(
     selectionSet.selections.forEach(function(selection) {
       if (selection.kind === kinds.FRAGMENT_SPREAD) {
         // We assume that all spreads were added by us
+        if (selection.directives && selection.directives.length) {
+          throw new Error(
+            'Directives are not yet supported for `${fragment}`-style ' +
+            'fragment references.'
+          );
+        }
         fragments.push(printFragmentReference(getName(selection), options));
       } else if (selection.kind === kinds.INLINE_FRAGMENT) {
         fragments.push(printInlineFragment(selection, options));
@@ -279,42 +289,53 @@ function printFieldsAndFragments(
   };
 }
 
-function printArguments(args, options) {
+function printArguments(args) {
   if (!args) {
     return null;
   }
   var value = args.value;
   if (value.kind === kinds.LIST) {
     return '[' + value.values.map(function(arg) {
-      return printArgument(arg, options)
+      return printArgument(arg)
     }).join(', ') + ']';
   } else {
-    return printArgument(value, options);
+    return printArgument(value);
   }
 }
 
-function printArgument(arg, options) {
+function printArgument(arg) {
+  var value = null;
   switch (arg.kind) {
     case kinds.INT:
-      return JSON.stringify(parseInt(arg.value, 10));
+      value = JSON.stringify(parseInt(arg.value, 10));
+      break;
     case kinds.FLOAT:
-      return JSON.stringify(parseFloat(arg.value));
+      value = JSON.stringify(parseFloat(arg.value));
+      break;
     case kinds.STRING:
     case kinds.ENUM:
     case kinds.BOOLEAN:
-      return JSON.stringify(arg.value);
+      value = JSON.stringify(arg.value);
+      break;
     case kinds.VARIABLE:
       if (!arg.name || arg.name.kind !== kinds.NAME) {
         throw new Error('Expected variable to have a name');
       }
       return printCallVariable(arg.name.value);
     default:
-      throw new Error('Unexpected arg kind: ' + arg.kind);
+      throw new Error(
+        'Unexpected argument kind `' + arg.kind + '`, use a variable instead.'
+      );
   }
+  return printCallValue(value);
 }
 
 function printCallVariable(name) {
   return 'new GraphQL.CallVariable(' + JSON.stringify(name) + ')';
+}
+
+function printCallValue(value) {
+  return 'new GraphQL.CallValue(' + value + ')';
 }
 
 function printFields(fields, type, options, requisiteFields, parentType) {
@@ -476,8 +497,9 @@ function printField(
     metadata.requisite = true;
   }
 
-  var callsCode = printCalls(field, fieldDecl, options);
+  var callsCode = printCalls(field.arguments, fieldDecl, options);
 
+  var directiveCode = printDirectives(field.directives);
   var fieldAliasCode = field.alias ?
     JSON.stringify(field.alias.value) :
     null;
@@ -490,20 +512,49 @@ function printField(
     callsCode,
     fieldAliasCode,
     null,
-    metadataCode
+    metadataCode,
+    directiveCode
   ]);
 
   return 'new GraphQL.Field(' + argsCode + ')';
 }
 
-function printCalls(field, fieldDecl, options) {
-  if (field.arguments.length === 0) {
+function printDirectives(directives) {
+  if (!directives) {
+    return null;
+  }
+  var printedDirectives;
+  directives.forEach(function(directive) {
+    var name = getName(directive);
+    if (name === 'relay') {
+      // relay metadata is extracted separately
+      return;
+    }
+    printedDirectives = printedDirectives || [];
+    printedDirectives.push('{' +
+      'name: "' + name + '",' +
+      'arguments: [' + directive.arguments.map(function(argument) {
+        return '{' +
+          'name: "' + getName(argument) + '",' +
+          'value: ' + printArgument(argument.value) +
+        '}';
+      }).join(',') + ']' +
+    '}');
+  });
+  if (printedDirectives) {
+    return '[' + printedDirectives.join(',') + ']';
+  }
+  return null;
+}
+
+function printCalls(calls, fieldDecl) {
+  if (calls.length === 0) {
     return null;
   }
 
   // Each GraphQL RFC argument is mapped to a separate call. For GraphQL FB
   // calls with multiple arguments, we use GraphQL RFC array literals.
-  var callStrings = field.arguments.map(function(arg) {
+  var callStrings = calls.map(function(arg) {
     var callName = getName(arg);
     var callDecl = getArgNamed(fieldDecl, callName);
     if (!callDecl) {
@@ -523,7 +574,7 @@ function printCalls(field, fieldDecl, options) {
       'new GraphQL.Callv(' +
         getFunctionArgCode([
           JSON.stringify(callName),
-          printArguments(arg, options),
+          printArguments(arg),
           stringifyObject(metadata),
         ]) +
       ')'
