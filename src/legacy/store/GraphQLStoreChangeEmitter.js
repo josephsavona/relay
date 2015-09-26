@@ -73,6 +73,10 @@ var GraphQLStoreChangeEmitter = {
     scheduledIDs[getBroadcastID(id)] = subscribers.length - 1;
   },
 
+  hasActiveListeners: function(): boolean {
+    return subscribers.some(subscriber => !!subscriber);
+  },
+
   injectBatchingStrategy: function(batchStrategy: Function): void {
     batchUpdate = batchStrategy;
   },

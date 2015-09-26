@@ -81,7 +81,19 @@ class RelayStoreData {
     return _instance;
   }
 
+  static forceReset_DO_NOT_USE(): void {
+    // The correct implementation is to create a new RelayStoreData instance,
+    // but some modules hold onto a reference to the result of
+    // `getDefaultInstance()` - so those modules will have to be changed
+    // to get the instance at runtime instead of initialization time.
+    RelayStoreData.getDefaultInstance()._init();
+  }
+
   constructor() {
+    this._init();
+  }
+
+  _init(): void {
     var cachedRecords: Records = ({}: $FixMe);
     var cachedRootCallMap: RootCallMap = {};
     var queuedRecords: Records = ({}: $FixMe);

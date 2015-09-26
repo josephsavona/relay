@@ -85,6 +85,10 @@ class RelayMutationTransaction {
     this._handleOptimisticUpdate();
   }
 
+  static hasPendingMutations(): boolean {
+    return Object.keys(pendingTransactionMap).length === 0;
+  }
+
   static get(id: ClientMutationID): RelayMutationTransaction {
     var transaction = pendingTransactionMap[id];
     invariant(

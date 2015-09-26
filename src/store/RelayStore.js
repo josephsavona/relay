@@ -14,12 +14,15 @@
 'use strict';
 
 var GraphQLQueryRunner = require('GraphQLQueryRunner');
+var GraphQLStoreChangeEmitter = require('GraphQLStoreChangeEmitter');
 import type RelayMutation from 'RelayMutation';
 var RelayMutationTransaction = require('RelayMutationTransaction');
+var RelayPendingQueryTracker = require('RelayPendingQueryTracker');
 import type RelayQuery from 'RelayQuery';
 var RelayStoreData = require('RelayStoreData');
 
 var forEachRootCallArg = require('forEachRootCallArg');
+var invariant = require('invariant');
 var observeAllRelayQueryData = require('observeAllRelayQueryData');
 var observeRelayQueryData = require('observeRelayQueryData');
 var readRelayQueryData = require('readRelayQueryData');
@@ -143,6 +146,17 @@ var RelayStore = {
       results.push(data);
     });
     return results;
+  },
+
+  reset(): void {
+    invariant(
+      !GraphQLStoreChangeEmitter.hasActiveListeners() &&
+      !RelayMutationTransaction.hasPendingMutations() &&
+      !RelayPendingQueryTracker.hasPendingQueries(),
+      'RelayStore.reset(): Cannot reset the store while there are active ' +
+      'Relay Containers or pending mutations/queries.'
+    );
+    RelayStoreData.forceReset_DO_NOT_USE();
   },
 
   /**
